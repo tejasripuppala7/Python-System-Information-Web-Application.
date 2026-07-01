@@ -1,0 +1,301 @@
+# ============================================================
+#  PYTHON LEARNING PROJECT: System Info Web App
+#  Run with: python app.py
+#  Then open: http://localhost:5000
+# ============================================================
+
+import platform
+import psutil
+import datetime
+from flask import Flask, render_template
+
+app = Flask(__name__)
+
+
+# ============================================================
+# CONCEPT 1: VARIABLES & DATA TYPES
+# ============================================================
+APP_TITLE = "My System Info"       # String
+PORT_NUMBER = 5000                 # Integer
+DEBUG_MODE = True                  # Boolean
+HOST_NAME = "0.0.0.0"
+
+
+
+# ============================================================
+# CONCEPT 2: FUNCTIONS
+# A function groups reusable code. def = define a function.
+# ============================================================
+def get_cpu_info():
+    """Returns CPU details as a dictionary."""
+
+    cpu_percent = psutil.cpu_percent(interval=1)
+    cpu_count = psutil.cpu_count()
+    cpu_name = platform.processor() or "Unknown Processor"
+
+    # --------------------------------------------------------
+    # CONCEPT 3: IF / ELIF / ELSE
+    # Used to make decisions based on conditions.
+    # --------------------------------------------------------
+    if cpu_percent >= 80:
+        cpu_status = "High Load"
+        status_color = "red"
+    elif cpu_percent >= 40:
+        cpu_status = "Moderate Load"
+        status_color = "orange"
+    else:
+        cpu_status = "Normal"
+        status_color = "green"
+
+    return {
+        "name": cpu_name,
+        "percent": cpu_percent,
+        "cores": cpu_count,
+        "status": cpu_status,
+        "color": status_color
+    }
+
+
+def get_memory_info():
+    """Returns RAM usage details."""
+    mem = psutil.virtual_memory()
+
+    total_gb = round(mem.total / (1024 ** 3), 2)
+    used_gb = round(mem.used / (1024 ** 3), 2)
+    free_gb = round(mem.available / (1024 ** 3), 2)
+    percent = mem.percent
+
+    # IF / ELIF / ELSE for RAM status
+    if percent >= 85:
+        status = "Critical"
+        color = "red"
+    elif percent >= 60:
+        status = "Heavy Usage"
+        color = "orange"
+    elif percent >= 30:
+        status = "Moderate"
+        color = "blue"
+    else:
+        status = "Low Usage"
+        color = "green"
+
+    return {
+        "total": total_gb,
+        "used": used_gb,
+        "free": free_gb,
+        "percent": percent,
+        "status": status,
+        "color": color
+    }
+
+
+def get_disk_info():
+    """Returns disk usage for all partitions using a LIST."""
+
+    # --------------------------------------------------------
+    # CONCEPT 4: LIST
+    # A list stores multiple items in order. Can be changed.
+    # Lists use square brackets: []
+    # --------------------------------------------------------
+    disk_list = []   # Empty list to start
+
+    partitions = psutil.disk_partitions()
+
+    for partition in partitions:
+        try:
+            usage = psutil.disk_usage(partition.mountpoint)
+            total_gb = round(usage.total / (1024 ** 3), 2)
+            used_gb = round(usage.used / (1024 ** 3), 2)
+            free_gb = round(usage.free / (1024 ** 3), 2)
+            percent = usage.percent
+
+            if percent >= 90:
+                color = "red"
+            elif percent >= 70:
+                color = "orange"
+            else:
+                color = "green"
+
+            # .append() adds an item to the end of a list
+            disk_list.append({
+                "device": partition.device,
+                "mountpoint": partition.mountpoint,
+                "fstype": partition.fstype,
+                "total": total_gb,
+                "used": used_gb,
+                "free": free_gb,
+                "percent": percent,
+                "color": color
+            })
+        except PermissionError:
+            pass  # Skip drives we can't read
+
+    return disk_list   # Return the full list
+
+
+def get_system_info():
+    """Returns basic OS info as a TUPLE."""
+
+    # --------------------------------------------------------
+    # CONCEPT 5: TUPLE
+    # Like a list, but CANNOT be changed (immutable).
+    # Tuples use parentheses: ()
+    # Good for fixed data that should never change.
+    # --------------------------------------------------------
+    os_details = (
+        platform.system(),       # e.g. "Windows"
+        platform.release(),      # e.g. "10"
+        platform.version(),      # Full version string
+        platform.machine(),      # e.g. "AMD64"
+        platform.node(),         # Computer/hostname
+    )
+
+    # Unpack tuple into named variables
+    os_name, os_release, os_version, architecture, hostname = os_details
+
+    # Uptime calculation
+    boot_time = psutil.boot_time()
+    boot_dt = datetime.datetime.fromtimestamp(boot_time)
+    now = datetime.datetime.now()
+    uptime = now - boot_dt
+    uptime_hours = int(uptime.total_seconds() // 3600)
+    uptime_minutes = int((uptime.total_seconds() % 3600) // 60)
+
+    return {
+        "os_name": os_name,
+        "os_release": os_release,
+        "os_version": os_version,
+        "architecture": architecture,
+        "hostname": hostname,
+        "uptime": f"{uptime_hours}h {uptime_minutes}m",
+        "python_version": platform.python_version()
+    }
+
+
+def get_top_processes():
+    """Returns top 5 CPU-eating processes using a LIST + WHILE LOOP."""
+
+    # --------------------------------------------------------
+    # CONCEPT 6: WHILE LOOP
+    # Repeats a block of code as long as a condition is True.
+    # Be careful: always make sure the condition becomes False!
+    # --------------------------------------------------------
+    all_processes = []
+
+    for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+        try:
+            info = proc.info
+            if info['cpu_percent'] is not None:
+                all_processes.append(info)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    # Sort by CPU usage (highest first)
+    all_processes.sort(key=lambda p: p['cpu_percent'], reverse=True)
+
+    # Use WHILE LOOP to pick top 5
+    top_processes = []
+    index = 0                          # Counter variable
+
+    while index < 5 and index < len(all_processes):
+        proc = all_processes[index]
+        top_processes.append({
+            "pid": proc['pid'],
+            "name": proc['name'],
+            "cpu": round(proc['cpu_percent'], 1),
+            "memory": round(proc['memory_percent'] or 0, 1)
+        })
+        index += 1                     # index = index + 1
+
+    return top_processes
+
+
+def get_network_info():
+    """Returns network stats."""
+    net = psutil.net_io_counters()
+
+    sent_mb = round(net.bytes_sent / (1024 ** 2), 2)
+    recv_mb = round(net.bytes_recv / (1024 ** 2), 2)
+
+    # --------------------------------------------------------
+    # CONCEPT 7: DICTIONARY
+    # Stores data as key-value pairs. Like a real dictionary.
+    # Keys are strings, values can be anything.
+    # --------------------------------------------------------
+    network_data = {
+        "sent_mb": sent_mb,
+        "recv_mb": recv_mb,
+        "packets_sent": net.packets_sent,
+        "packets_recv": net.packets_recv,
+    }
+
+    return network_data
+
+
+# ============================================================
+# CONCEPT 8: COMBINING EVERYTHING
+# This main function calls all other functions and bundles
+# the results into one big dictionary for the webpage.
+# ============================================================
+def collect_all_data():
+    """Collects all system info and returns as one dictionary."""
+
+    # --------------------------------------------------------
+    # CONCEPT 9: LIST COMPREHENSION (Bonus!)
+    # A short way to build a list using a loop in one line.
+    # --------------------------------------------------------
+    battery = psutil.sensors_battery()
+    battery_info = None
+
+    if battery is not None:
+        battery_percent = battery.percent
+        is_plugged = battery.power_plugged
+
+        # if/else inside a value (called a ternary expression)
+        charge_status = "Charging" if is_plugged else "On Battery"
+
+        if battery_percent >= 80:
+            bat_color = "green"
+        elif battery_percent >= 40:
+            bat_color = "orange"
+        else:
+            bat_color = "red"
+
+        battery_info = {
+            "percent": battery_percent,
+            "status": charge_status,
+            "color": bat_color,
+            "plugged": is_plugged
+        }
+
+    return {
+        "cpu": get_cpu_info(),
+        "memory": get_memory_info(),
+        "disks": get_disk_info(),        # This is a LIST of dicts
+        "system": get_system_info(),
+        "processes": get_top_processes(), # This is a LIST of dicts
+        "network": get_network_info(),
+        "battery": battery_info,
+        "timestamp": datetime.datetime.now().strftime("%d %b %Y, %I:%M:%S %p")
+    }
+
+
+# ============================================================
+# FLASK ROUTE: When browser visits "/", run this function
+# ============================================================
+@app.route("/")
+def index():
+    data = collect_all_data()
+    return render_template("index.html", data=data)
+
+
+# ============================================================
+# ENTRY POINT: Python runs this when you type: python app.py
+# ============================================================
+if __name__ == "__main__":
+    print("=" * 50)
+    print("  Python System Info App is starting...")
+    print(f"  Open your browser: http://localhost:{PORT_NUMBER}")
+    print("  Press CTRL+C to stop")
+    print("=" * 50)
+    app.run(debug=DEBUG_MODE, port=PORT_NUMBER, host=HOST_NAME)
